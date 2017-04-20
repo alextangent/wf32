@@ -13,3 +13,4 @@ EDIT name  Edit a word. For this, you will need an editor. The system as built
            to point to your favourite editor.
 SEE name   Shows a description and disassembly of the word.
 
+ 
