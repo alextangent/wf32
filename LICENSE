@@ -1,6 +1,29 @@
+     Licenced where possible under the 2 clause BSD
+     https://opensource.org/licenses/BSD-2-Clause
+     
+     The original Win32Forth system was public domain. Although the basic
+     structure of Win32Forth (for instance, meta compilation) and many of
+     its capabilities are employed in this code, all of the original
+     Win32Forth kernel and the assembler, and much of the supporting code,
+     has been completely rewritten. 
+     
+     The original code was originally developed by Tom Zimmer, Andrew
+     McKewan with minor contributions by others and placed in the public
+     domain. I acknowledge their copyrighted contributions and the
+     structure and some of the methods and concepts employed in this
+     further development.
+     
+     Each file has either a BSD licence (see below) or a note explaining
+     the provenance; normally, borrowed from the public domain Win32Forth.
+     If there are any discrepancies or copyright issues, please contact me
+     at alex at rivadpm dot com and I will endeavour to correct the
+     licence, remove or rewrite out the copyrighted code.
+
+
+
 BSD 2-Clause License
 
-Copyright (c) 2017, Alex
+Copyright (c) 2017, Alex McDonald
 All rights reserved.
 
 Redistribution and use in source and binary forms, with or without
