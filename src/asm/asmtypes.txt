@@ -1,0 +1,145 @@
+\ --------------------------- Change Block -------------------------------
+\
+\
+\ ------------------------- End Change Block -----------------------------
+\
+\ Experimental: a fully optimising, STC based, ANS Forth compliant kernel
+\
+\
+\    Copyright [c] 2005, 2017 by Alex McDonald (alex at rivadpm dot com)
+\
+\    Redistribution and use in source and binary forms, with or without
+\    modification, are permitted provided that the following conditions are
+\    met:
+\
+\    1. Redistributions of source code must retain the above copyright
+\    notice, this list of conditions and the following disclaimer.
+\
+\    2. Redistributions in binary form must reproduce the above copyright
+\    notice, this list of conditions and the following disclaimer in the
+\    documentation and/or other materials provided with the distribution.
+\
+\    THIS SOFTWARE IS PROVIDED BY THE COPYRIGHT HOLDERS AND CONTRIBUTORS "AS
+\    IS" AND ANY EXPRESS OR IMPLIED WARRANTIES, INCLUDING, BUT NOT LIMITED
+\    TO, THE IMPLIED WARRANTIES OF MERCHANTABILITY AND FITNESS FOR A
+\    PARTICULAR PURPOSE ARE DISCLAIMED. IN NO EVENT SHALL THE COPYRIGHT
+\    HOLDER OR CONTRIBUTORS BE LIABLE FOR ANY DIRECT, INDIRECT, INCIDENTAL,
+\    SPECIAL, EXEMPLARY, OR CONSEQUENTIAL DAMAGES (INCLUDING, BUT NOT
+\    LIMITED TO, PROCUREMENT OF SUBSTITUTE GOODS OR SERVICES; LOSS OF USE,
+\    DATA, OR PROFITS; OR BUSINESS INTERRUPTION) HOWEVER CAUSED AND ON ANY
+\    THEORY OF LIABILITY, WHETHER IN CONTRACT, STRICT LIABILITY, OR TORT (
+\    INCLUDING NEGLIGENCE OR OTHERWISE) ARISING IN ANY WAY OUT OF THE USE OF
+\    THIS SOFTWARE, EVEN IF ADVISED OF THE POSSIBILITY OF SUCH DAMAGE. ))
+\
+\
+\
+\ ------------------------------------------------------------------------
+
+  Assembler state machine
+
+  operator [ operand [ operand ... ]]
+
+  The “Instruction” column gives the syntax of the instruction statement as it would
+  appear in an ASM386 program. The following is a list of the symbols used to represent
+  operands in the instruction statements:
+
+(rel implied)
+
+   . rel8 -- A relative address in the range from 128 bytes before the end of the
+      instruction to 127 bytes after the end of the instruction.
+   . rel16, rel32, rel64 -- A relative address within the same code segment as the
+      instruction assembled. The rel16 symbol applies to instructions with an operandsize
+      attribute of 16 bits; the rel32 symbol applies to instructions with an
+      operand-size attribute of 32 bits; the rel64 symbol applies to instructions with an
+      operand-size attribute of 64 bits.
+      
+byte | word | dword | dqword
+   . moffs8, moffs16, moffs32, moffs64 -- A simple memory variable (memory
+      offset) of type byte, word, or doubleword used by some variants of the MOV
+      instruction. The actual address is given by a simple offset relative to the segment
+      base. No ModR/M byte is used in the instruction. The number shown with moffs
+      indicates its size, which is determined by the address-size attribute of the
+      instruction.
+   . imm8 -- An immediate byte value. The imm8 symbol is a signed number
+      between –128 and +127 inclusive. For instructions in which imm8 is combined
+      with a word or doubleword operand, the immediate value is sign-extended to
+      form a word or doubleword. The upper byte of the word is filled with the topmost
+      bit of the immediate value.
+   . imm16 -- An immediate word value used for instructions whose operand-size
+      attribute is 16 bits. This is a number between –32,768 and +32,767 inclusive.
+   . imm32 -- An immediate doubleword value used for instructions whose
+      operand-size attribute is 32 bits. It allows the use of a number between
+      +2,147,483,647 and –2,147,483,648 inclusive.
+   . imm64 -- An immediate quadword value used for instructions whose
+      operand-size attribute is 64 bits. The value allows the use of a number
+      between +9,223,372,036,854,775,807 and –9,223,372,036,854,775,808
+      inclusive.
+
+reg ( as in AL, AH, EAX etc )
+   . r8 -- One of the byte general-purpose registers: AL, CL, DL, BL, AH, CH, DH, BH,
+      BPL, SPL, DIL and SIL; or one of the byte registers (R8L - R15L) available when
+      using REX.R and 64-bit mode.
+   . r16 -- One of the word general-purpose registers: AX, CX, DX, BX, SP, BP, SI, DI;
+      or one of the word registers (R8-R15) available when using REX.R and 64-bit
+      mode.
+   . r32 -- One of the doubleword general-purpose registers: EAX, ECX, EDX, EBX,
+      ESP, EBP, ESI, EDI; or one of the doubleword registers (R8D - R15D) available
+      when using REX.R in 64-bit mode.
+   . r64 -- One of the quadword general-purpose registers: RAX, RBX, RCX, RDX,
+      RDI, RSI, RBP, RSP, R8–R15. These are available when using REX.R and 64-bit
+      mode.
+
+byte | word | dword | qword | dqword
+   . m -- A 16-, 32- or 64-bit operand in memory.
+   . m8 -- A byte operand in memory, usually expressed as a variable or array name,
+      but pointed to by the DS:(E)SI or ES:(E)DI registers. In 64-bit mode, it is pointed
+      to by the RSI or RDI registers.
+   . m16 -- A word operand in memory, usually expressed as a variable or array
+      name, but pointed to by the DS:(E)SI or ES:(E)DI registers. This nomenclature is
+      used only with the string instructions.
+   . m32 -- A doubleword operand in memory, usually expressed as a variable or
+      array name, but pointed to by the DS:(E)SI or ES:(E)DI registers. This nomenclature
+      is used only with the string instructions.
+   . m64 -- A memory quadword operand in memory.
+   . m128 -- A memory double quadword operand in memory.
+   . m16int, m32int, m64int -- A word, doubleword, and quadword integer
+      (respectively) operand in memory. These symbols designate integers that are
+      used as operands for x87 FPU integer instructions.
+
+float | double | extended
+   . m32fp, m64fp, m80fp -- A single-precision, double-precision, and double
+      extended-precision (respectively) floating-point operand in memory. These
+      symbols designate floating-point values that are used as operands for x87 FPU
+      floating-point instructions.
+
+size sreg: { n reg reg *s }
+   . Memory operand where all sub-operands are optional
+   . size is byte | word | dword | qword | dqword | float | double | extended
+   . n is a literal constant
+   . reg is any of ExX or RxX
+   . *s is *2 *4 *8 scale index
+   . r/m8 -- A byte operand that is either the contents of a byte general-purpose
+      register (AL, CL, DL, BL, AH, CH, DH, BH, BPL, SPL, DIL and SIL) or a byte from
+      memory. Byte registers R8L - R15L are available using REX.R in 64-bit mode.
+   . r/m16 -- A word general-purpose register or memory operand used for instructions
+      whose operand-size attribute is 16 bits. The word general-purpose registers
+      are: AX, CX, DX, BX, SP, BP, SI, DI. The contents of memory are found at the
+      address provided by the effective address computation. Word registers R8W -
+      R15W are available using REX.R in 64-bit mode.
+   . r/m32 -- A doubleword general-purpose register or memory operand used for
+      instructions whose operand-size attribute is 32 bits. The doubleword general purpose
+      registers are: EAX, ECX, EDX, EBX, ESP, EBP, ESI, EDI. The contents of
+      memory are found at the address provided by the effective address computation.
+      Doubleword registers R8D - R15D are available when using REX.R in 64-bit
+      mode.
+   . r/m64 -- A quadword general-purpose register or memory operand used for
+      instructions whose operand-size attribute is 64 bits when using REX.W.
+      Quadword general-purpose registers are: RAX, RBX, RCX, RDX, RDI, RSI, RBP,
+      RSP, R8–R15; these are available only in 64-bit mode. The contents of memory
+      are found at the address provided by the effective address computation.
+   . sreg: -- A segment register. Only FS: is supported
+
+ST, ST0 etc
+   . ST or ST0 -- The top element of the FPU register stack.
+   . STi -- The ith element from the top of the FPU register stack (i is 0 through 7).
+
